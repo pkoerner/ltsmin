@@ -73,6 +73,8 @@ struct vector_domain_shared {
 
 	// init universe should be called after vdom_create_domain
 	void (*init_universe)(vdom_t dom);
+
+	void (*order)(vdom_t dom, int *order);
 };
 
 /** Initialise the shared part of the domain. */

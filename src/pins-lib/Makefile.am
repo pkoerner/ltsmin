@@ -75,4 +75,5 @@ libpins_la_SOURCES += pins2pins-por-check.c
 libpins_la_SOURCES += property-semantics.c property-semantics.h
 libpins_la_CPPFLAGS = -DNXT $(AM_CPPFLAGS) -I${top_srcdir}/ltl2ba
 libpins_la_LIBADD    =
-libpins_la_LIBADD   += ../ltsmin-lib/libmucalc.la 
+libpins_la_LIBADD   += ../ltsmin-lib/libmucalc.la ../vset-lib/libvset.la
+nodist_EXTRA_libpins_la_SOURCES = automake-force-linker.cxx # req. by vset

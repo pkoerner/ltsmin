@@ -488,7 +488,7 @@ static void rel_add_fdd(vrel_t rel,const int* src,const int *dst){
 }
 
 static void vset_fdd_reorder() {
-  static int lastnum = 1000;
+  static int lastnum = 1;
   if (fdd_order_strat!=BDD_REORDER_NONE) {
     bdd_gbc();
     if (bdd_getnodenum()>2*lastnum) {
@@ -499,6 +499,22 @@ static void vset_fdd_reorder() {
     }
   }
 }
+
+static void set_dot_fdd(FILE* fp, vset_t src) {
+    bdd_fprintdot(fp, src->bdd);
+}
+
+static void rel_dot_fdd(FILE* fp, vrel_t rel) {
+    bdd_fprintdot(fp, rel->bdd);
+}
+
+static void fdd_order(vdom_t dom, int *order) {
+    for (int i = 0; i < dom->shared.size; i++) {
+        order[i] = bdd_level2var(dom->vars[i]) / 2;
+    }
+}
+
+
 
 vdom_t vdom_create_fdd(int n){
 	Warning(info,"Creating a BuDDy fdd domain.");
@@ -550,6 +566,9 @@ vdom_t vdom_create_fdd(int n){
 	dom->shared.set_prev=set_prev_appex_fdd;
 	dom->shared.reorder=vset_fdd_reorder;
     dom->shared.set_destroy=set_destroy_fdd;
+    dom->shared.set_dot=set_dot_fdd;
+    dom->shared.rel_dot=rel_dot_fdd;
+    dom->shared.order=fdd_order;
 	return dom;
 }
 

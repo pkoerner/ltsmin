@@ -554,3 +554,12 @@ vdom_init_universe(vdom_t dom)
 {
     if (dom->shared.init_universe != NULL) dom->shared.init_universe(dom);
 }
+
+void
+vdom_order(vdom_t dom, int *order) {
+    if (dom->shared.order == NULL) {
+        for (int i = 0; i < dom->shared.size; i++) order[i] = i;
+    } else {
+        dom->shared.order(dom, order);
+    }
+}

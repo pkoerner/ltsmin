@@ -57,6 +57,9 @@ SUBDIRS += ltsmin-reduce-dist
 SUBDIRS += ce
 endif
 
+# vset (BDD/MDD) lib
+SUBDIRS += vset-lib
+
 # PINS lib, defining the partitioned next-state interface
 SUBDIRS += pins-lib
 
@@ -65,9 +68,6 @@ SUBDIRS += pins-open
 endif
 SUBDIRS += pins2lts-dist
 SUBDIRS += torx
-
-# vset (BDD/MDD) lib
-SUBDIRS += vset-lib
 
 # symbolic parity game lib
 SUBDIRS += spg-lib

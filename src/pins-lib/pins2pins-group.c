@@ -11,6 +11,8 @@
 #include <ltsmin-lib/lts-type.h>
 #include <util-lib/dynamic-array.h>
 #include <ltsmin-lib/ltsmin-standard.h>
+#include <ltsmin-lib/lts-type.h>
+#include <vset-lib/vector_set.h>
 
 typedef struct group_context {
     int                 len;
@@ -415,7 +417,52 @@ subsume_cols(matrix_t *r, matrix_t *mayw, matrix_t *mustw, int cola, int colb) {
 }
 
 static void
-apply_regroup_spec (matrix_t* r, matrix_t* mayw, matrix_t* mustw, const char *spec_, guard_t **guards)
+vector_set_swap (matrix_t *r, matrix_t *mayw, matrix_t *mustw, lts_type_t lts_type) {
+    HREassert(
+                dm_ncols(r) == dm_ncols(mayw) &&
+                dm_nrows(r) == dm_nrows(mayw) &&
+                dm_ncols(r) == dm_ncols(mustw) &&
+                dm_nrows(r) == dm_nrows(mustw), "matrix sizes do not match");
+
+    int cols = dm_ncols(r);
+    int rows = dm_nrows(r);
+
+    matrix_t* test = RTmalloc(sizeof(matrix_t));
+        dm_create(test, rows, cols);
+        dm_copy(r, test);
+        dm_apply_or(test, mayw);
+
+    vdom_t domain = vdom_create_domain(cols, VSET_BuDDy_fdd);
+
+    for (int i = 0; i < cols; i++) vdom_set_name(domain, i, lts_type_get_state_name(lts_type, i));
+
+    vset_t set = vset_create(domain, -1, NULL);
+    for (int i = 0; i < rows; i++) {
+        int vector[cols];
+        for (int j = 0; j < cols; j++) {
+            if (dm_is_set(test, i, j)) vector[j] = 1;
+            else vector[j] = 0;
+        }
+
+        vset_add(set, vector);
+    }
+
+    dm_free(test);
+
+    vset_reorder(domain);
+    int order[cols];
+    vdom_order(domain, order);
+    vset_destroy(set);
+
+    for (int i = 0; i < cols; i++) {
+        dm_swap_cols(r, i, order[i]);
+        dm_swap_cols(mayw, i, order[i]);
+        dm_swap_cols(mustw, i, order[i]);
+    }
+}
+
+static void
+apply_regroup_spec (matrix_t* r, matrix_t* mayw, matrix_t* mustw, const char *spec_, guard_t **guards, lts_type_t lts_type)
 {
     
     HREassert(
@@ -478,26 +525,29 @@ apply_regroup_spec (matrix_t* r, matrix_t* mayw, matrix_t* mustw, const char *sp
             } else if (strcasecmp (tok, "ru") == 0) {
                 Print1 (info, "Regroup Row sUbsume");
                 dm_subsume_rows (r, mayw, mustw, &subsume_rows, &context);
+            } else if (strcasecmp (tok, "vs") == 0) {
+                Print1 (info, "Regroup Vector Set");
+                vector_set_swap(r, mayw, mustw, lts_type);
             } else if (strcasecmp (tok, "gsa") == 0) {
                 const char         *macro = "gc,gr,csa,rs";
                 Print1 (info, "Regroup macro Simulated Annealing: %s", macro);
-                apply_regroup_spec (r, mayw, mustw, macro, guards);
+                apply_regroup_spec (r, mayw, mustw, macro, guards, lts_type);
             } else if (strcasecmp (tok, "gs") == 0) {
                 const char         *macro = "gc,gr,cw,rs";
                 Print1 (info, "Regroup macro Group Safely: %s", macro);
-                apply_regroup_spec (r, mayw, mustw, macro, guards);
+                apply_regroup_spec (r, mayw, mustw, macro, guards, lts_type);
             } else if (strcasecmp (tok, "ga") == 0) {
                 const char         *macro = "ru,gc,rs,cw,rs";
                 Print1 (info, "Regroup macro Group Aggressively: %s", macro);
-                apply_regroup_spec (r, mayw, mustw, macro, guards);
+                apply_regroup_spec (r, mayw, mustw, macro, guards, lts_type);
             } else if (strcasecmp (tok, "gc") == 0) {
                 const char         *macro = "cs,cn";
                 Print1 (info, "Regroup macro Cols: %s", macro);
-                apply_regroup_spec (r, mayw, mustw, macro, guards);
+                apply_regroup_spec (r, mayw, mustw, macro, guards, lts_type);
             } else if (strcasecmp (tok, "gr") == 0) {
                 const char         *macro = "rs,rn";
                 Print1 (info, "Regroup macro Rows: %s", macro);
-                apply_regroup_spec (r, mayw, mustw, macro, guards);
+                apply_regroup_spec (r, mayw, mustw, macro, guards, lts_type);
             } else if (tok[0] != '\0') {
                 Fatal (1, error, "Unknown regrouping specification: '%s'",
                        tok);
@@ -558,10 +608,10 @@ GBregroup (model_t model, const char *regroup_spec)
     Print1 (info, "Regroup specification: %s", regroup_spec);
     if (GBgetUseGuards(model)) {
         dm_copy (GBgetMatrix(model, GBgetMatrixID(model, LTSMIN_MATRIX_ACTIONS_READS)), r);
-        apply_regroup_spec (r, mayw, mustw, regroup_spec, GBgetGuardsInfo(model));
+        apply_regroup_spec (r, mayw, mustw, regroup_spec, GBgetGuardsInfo(model), GBgetLTStype(model));
     } else {
         dm_copy (GBgetDMInfoRead(model), r);
-        apply_regroup_spec (r, mayw, mustw, regroup_spec, NULL);
+        apply_regroup_spec (r, mayw, mustw, regroup_spec, NULL, GBgetLTStype(model));
     }
 
     // post processing regroup specification
