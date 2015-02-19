@@ -60,6 +60,7 @@ static int   act_index;
 static int   act_label;
 static int   action_typeno;
 static int   ErrorActions = 0; // count number of found errors (action/deadlock/invariant)
+static char* vector_file = NULL;
 
 static uint64_t *seen_actions = 0;
 static int seen_actions_size = 0;
@@ -237,6 +238,7 @@ static  struct poptOption options[] = {
     { NULL, 0 , POPT_ARG_INCLUDE_TABLE, greybox_options , 0 , "PINS options",NULL},
     { NULL, 0 , POPT_ARG_INCLUDE_TABLE, vset_options , 0 , "Vector set options",NULL},
     { "no-soundness-check", 0, POPT_ARG_VAL, &no_soundness_check, 1, "disable checking whether the model specification is sound for guards", NULL },
+    { "vectors", 0, POPT_ARG_STRING, &vector_file, 0, "file to write all vectors to", NULL },
     POPT_TABLEEND
 };
 
@@ -1121,6 +1123,18 @@ stats_and_progress_report(vset_t current, vset_t visited, int level)
     }    
 }
 
+
+static void dump_vector (void *context, int *vector)
+{
+    FILE* fp = (FILE*) context;
+
+    for (int i = 0; i < N; i++) {
+        fprintf(fp,"%d", vector[i]);
+        if (i+1 != N) fprintf(fp, " ");
+    }
+    fprintf(fp, "\n");
+}
+
 static void
 final_stat_reporting(vset_t visited, rt_timer_t timer)
 {
@@ -1158,6 +1172,16 @@ final_stat_reporting(vset_t visited, rt_timer_t timer)
 	Debug("( peak transition cache: %ld nodes; peak group explored: "
 	      "%ld nodes )\n", max_trans_count, max_grp_count);
       }
+    }
+
+    if (vector_file != NULL) {
+        Warning(info, "Dumping vectors to %s", vector_file);
+
+        FILE *fp = fopen(vector_file, "w+");
+        vset_enum(visited, &dump_vector, fp);
+        fclose(fp);
+
+        Warning(info, "Dumping done #yolo");
     }
 }
 
