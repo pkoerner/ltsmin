@@ -582,6 +582,8 @@ void GBinitModelDefaults (model_t *p_model, model_t default_src)
 
     model->static_info_index = default_src->static_info_index;
     model->static_info_matrices = default_src->static_info_matrices;
+
+    model->exit = default_src->exit;
 }
 
 void* GBgetContext(model_t model){
@@ -1457,4 +1459,14 @@ string_set_t GBgetDefaultFilter(model_t model){
 
 void ltsmin_abort(int code) {
     HREabort (code);
+}
+
+void GBsetExit(model_t model, ExitCB exit)
+{
+    model->exit = exit;
+}
+
+void GBExit(model_t model)
+{
+    if (model->exit != NULL) model->exit(model);
 }
