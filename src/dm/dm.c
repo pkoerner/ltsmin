@@ -7,6 +7,9 @@
 #include <stdlib.h>
 #include <time.h>
 
+#include <suitesparse/amd.h>
+#include <suitesparse/colamd.h>
+
 #include <dm/dm.h>
 
 #include <hre/user.h>
@@ -1810,4 +1813,84 @@ dm_col_aggr(const matrix_t* const m, int* const cols_metric, dm_aggr_op_t op, co
     if (sig_dec_dig != NULL) *sig_dec_dig = min(*sig_dec_dig, snprintf(NULL, 0, "%zd", dm_ncols(m) * (size_t) dm_nrows(m)));
 
     return result;
+}
+
+void dm_amd(const matrix_t* m, int* row_perm, int* col_perm)
+{
+    const int n = dm_nrows(m) + dm_ncols(m);
+    int Ap[n + 1];
+
+    size_t nz = 0;
+
+    Ap[0] = 0;
+
+    for (int i = 0; i < dm_nrows(m); i++) {
+        nz += dm_ones_in_row(m, i);
+        Ap[i + 1] = Ap[i] + dm_ones_in_row(m, i);
+    }
+
+    for (int i = 0; i < dm_ncols(m); i++) {
+        nz += dm_ones_in_col(m, i);
+        Ap[dm_nrows(m) + i + 1] = Ap[dm_nrows(m) + i] + dm_ones_in_col(m, i);
+    }
+
+    int* Ai = RTmalloc(sizeof(int[nz]));
+
+    for (int i = 0; i < dm_nrows(m); i++) {
+        int num_non_zero = 0;
+        for (int j = 0; j < dm_ncols(m); j++) {
+            if (dm_is_set(m, i, j)) Ai[Ap[i] + num_non_zero++] = dm_nrows(m) + j;
+        }
+    }
+
+    for (int i = 0; i < dm_ncols(m); i++) {
+        int num_non_zero = 0;
+        for (int j = 0; j < dm_nrows(m); j++) {
+            if (dm_is_set(m, j, i)) Ai[Ap[dm_nrows(m) + i] + num_non_zero++] = j;
+        }
+    }
+
+    int perm[n];
+    double Control[AMD_CONTROL], Info[AMD_INFO];
+
+    amd_order(n, Ap, Ai, perm, Control, Info);
+
+    RTfree(Ai);
+
+    Warning(infoLong, "Parsing ordering");
+    int r = 0, c = 0;
+    for (int i = 0; i < n; i++) {
+//        if (perm[i] < dm_nrows(m) + dm_ncols(m)) { uncomment for total graph
+            if (perm[i] < dm_nrows(m)) row_perm[r++] = perm[i];
+            else col_perm[c++] = perm[i] - dm_nrows(m);
+//        }
+    }
+}
+
+void
+dm_colamd(const matrix_t* m, int* col_perm)
+{
+    int stats[COLAMD_STATS];
+    double knobs[COLAMD_KNOBS];
+    colamd_set_defaults(knobs);
+
+    int p[dm_ncols(m) + 1];
+    p[0] = 0;
+
+    for (int i = 0; i < dm_ncols(m); i++) p[i + 1] = p[i] + dm_ones_in_col(m, i);
+
+    const int Alen = colamd_recommended(p[dm_ncols(m)], dm_nrows(m), dm_ncols(m));
+
+    int* A = RTmalloc(sizeof(int[Alen]));
+    int nz = 0;
+    for (int i = 0; i < dm_ncols(m); i++) {
+        for (int j = 0; j < dm_nrows(m); j++) {
+            if (dm_is_set(m, j, i)) A[nz++] = j;
+        }
+    }
+
+    colamd(dm_nrows(m), dm_ncols(m), Alen, A, p, knobs, stats);
+    RTfree(A);
+
+    memcpy(col_perm, p, sizeof(int[dm_ncols(m)]));
 }

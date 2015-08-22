@@ -114,6 +114,9 @@ extern void dm_anneal(matrix_t* m, dm_row_column_t rc, dm_cost_fn fn, dm_aggr_op
 extern void dm_optimize(matrix_t* m);
 extern void dm_all_perm(matrix_t* m);
 
+extern void dm_amd(const matrix_t* m, int* row_perm, int* col_perm);
+extern void dm_colamd(const matrix_t* m, int* col_perm);
+
 extern void dm_horizontal_flip(matrix_t* m);
 extern void dm_vertical_flip(matrix_t* m);
 

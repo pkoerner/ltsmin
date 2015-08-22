@@ -1082,7 +1082,18 @@ apply_regroup_spec (rw_info_t *inf, const char *spec_, guard_t **guards, const c
                 apply_permutation(inf, row_perm, col_perm);
             }
 #endif
-            else if (strcasecmp (tok, "mm") == 0) {
+            else if (strcasecmp (tok, "samd") == 0) {
+                Print1 (info, "Regroup Suitesparse' Approximate Minimum Degree");
+                int row_perm[dm_nrows(selection)];
+                int col_perm[dm_ncols(selection)];
+                dm_amd(selection, row_perm, col_perm);
+                apply_permutation(inf, row_perm, col_perm);
+            } else if (strcasecmp (tok, "scamd") == 0) {
+                Print1 (info, "Regroup Suitesparse' Column Approximate Minimum Degree");
+                int col_perm[dm_ncols(selection)];
+                dm_colamd(selection, col_perm);
+                apply_permutation(inf, NULL, col_perm);
+            } else if (strcasecmp (tok, "mm") == 0) {
                 Print1 (info, "Regroup Matrix Metrics");
                 print_dm_aggrs(selection);
             } else if (strcasecmp (tok, "gsa") == 0) {

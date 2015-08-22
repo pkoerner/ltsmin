@@ -25,7 +25,8 @@ libdm_viennacl_la_LIBADD    = ../hre/libhre.la $(VIENNACL_LIBS)
 
 # libdm
 libdm_la_SOURCES       	= dm.c dm.h bitvector.c bitvector.h
-libdm_la_CPPFLAGS      	= $(AM_CPPFLAGS)
+libdm_la_CPPFLAGS      	= $(AM_CPPFLAGS) -L/usr/lib/x86_64-linux-gnu/libamd -L/usr/lib/x86_64-linux-gnu/libcolamd 
+libdm_la_LIBADD         = /usr/lib/x86_64-linux-gnu/libamd.a -lamd /usr/lib/x86_64-linux-gnu/libcolamd.a -lcolamd
 
 #libdm_debug
 libdm_debug_la_SOURCES 	= dm.c dm.h bitvector.c bitvector.h
