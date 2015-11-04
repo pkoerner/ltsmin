@@ -2120,6 +2120,117 @@ reach_bfs_prev(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
     }
 }
 
+void
+test_forward_back (vset_t  P)
+{
+    vset_t* levels = RTmalloc(sizeof(vset_t) * 1000);
+    int level = 0;
+
+    for (int i = 0; i < 1000; i++) levels[i] = vset_create(domain, -1, NULL);
+
+    vset_t visited = vset_create(domain, -1, NULL);
+    int initstate[N];
+    GBgetInitialState(model, initstate);
+    vset_add(visited, initstate);
+
+    vset_t next = vset_create(domain, -1, NULL);
+    vset_copy(next, visited);
+
+    // do forward BFS reach from initial
+    while(!vset_is_empty(next)) {
+        vset_copy(levels[level], next);
+        level++;
+
+        vset_clear(next);
+        for (int i = 0; i < nGrps; i++) {
+            vset_t tmp = vset_create(domain, -1, NULL);
+            vset_next(tmp, visited, group_next[i]);
+            vset_union(next, tmp);
+            vset_destroy(tmp);
+        }
+
+        vset_minus(next, visited);
+        vset_union(visited, next);
+
+    }
+
+    // test forward reach result
+    Warning(info, "Test: there are %d BFS levels", level);
+
+    double c;
+    vset_count (visited, NULL, &c);
+
+    Warning(info, "Test: there are %f reachable states", c);
+
+    for (int i = 0; i < level; i++) {
+        double c;
+        vset_count (levels[i], NULL, &c);
+
+        Warning(info, "Forward: level %d has %f new states", i, c);
+    }
+
+    // do backward reach from last level of forward reach
+    // first add all deadlock states (they may not be in the last BFS level)
+    vset_t deadlock = vset_create(domain, -1, NULL);
+    vset_copy(deadlock, visited);
+    for (int i = 0; i < nGrps; i++) {
+        vset_t tmp = vset_create(domain, -1, NULL);
+        vset_next(tmp, visited, group_next[i]);
+        vset_prev(tmp, tmp, group_next[i], P);
+        vset_minus(deadlock, tmp);
+        vset_destroy(tmp);
+    }
+
+    vset_copy(visited, levels[level - 1]);
+    vset_union(visited, deadlock);
+    vset_destroy(deadlock);
+
+    level = 0;
+
+    {
+        double c;
+        vset_count (visited, NULL, &c);
+
+        Warning(info, "Backward: level %d has %f states", level, c);
+    }
+
+    vset_t prev = vset_create(domain, -1, NULL);
+    vset_copy(prev, visited);
+    while(!vset_equal(visited, P) && level < 1000) {
+
+        vset_clear(prev);
+        for (int i = 0; i < nGrps; i++) {
+            vset_t tmp = vset_create(domain, -1, NULL);
+            vset_prev(tmp, visited, group_next[i], P);
+            vset_union(prev, tmp);
+            vset_destroy(tmp);
+        }
+
+        vset_minus(prev, visited);
+        vset_union(visited, prev);
+
+        double c;
+        vset_count (visited, NULL, &c);
+
+        level++;
+        Warning(info, "Backward: level %d has %f states", level, c);
+
+
+    }
+
+    // test correctness
+    vset_t tmp = vset_create(domain, -1, NULL);
+    vset_copy(tmp, P);
+    vset_minus(tmp, visited);
+
+
+    double cc;
+    vset_count (tmp, NULL, &cc);
+
+    Warning(info, "end %f states differ", cc);
+    exit(0);
+}
+
 static void
 reach_bfs(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
               long *eg_count, long *next_count, long *guard_count)
@@ -2229,6 +2340,8 @@ reach_bfs(vset_t visited, vset_t visited_old, bitvector_t *reach_groups,
             vset_destroy(maybe[i]);
         }
     }
+
+    test_forward_back(visited);
 
     return;
     (void)visited_old;
