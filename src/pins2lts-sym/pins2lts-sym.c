@@ -1495,6 +1495,29 @@ stats_and_progress_report(vset_t current, vset_t visited, int level)
         vset_dot(fp, visited);
         fclose(fp);
 
+        // dot B states
+        {
+            file = "%s/b-visited-l%d.dot";
+            char fvbuf[snprintf(NULL, 0, file, dot_dir, level)];
+            sprintf(fvbuf, file, dot_dir, level);
+
+            fp = fopen(fvbuf, "w+");
+
+            vset_t init = vset_create(domain, -1, NULL);
+            int i[4];
+            GBgetInitialState(model, i);
+            vset_add(init, i);
+            vset_t visited_min_init = vset_create(domain, -1, NULL);
+            vset_copy(visited_min_init, visited);
+            vset_minus(visited_min_init, init);
+            int proj[3] = {0,1,2};
+            vset_t bvisited = vset_create(domain, 3, proj);
+            vset_project(bvisited, visited_min_init);
+
+            vset_dot(fp, bvisited);
+            fclose(fp);
+        }
+
         for (int i = 0; i < nGrps; i++) {
             file = "%s/group_next-l%d-k%d.dot";
             char fgbuf[snprintf(NULL, 0, file, dot_dir, level, i)];
