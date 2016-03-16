@@ -41,13 +41,21 @@ pins_add_edge_label_visible (model_t model, int act_label, int act_index)
 {
     int *visibles = GBgetPorGroupVisibility (model);
     HREassert (visibles != NULL, "pins_add_edge_label_visible: No (lower) PINS layer uses POR visibility.");
-    int label_count = pins_get_edge_label_count (model);
-    int groups = pins_get_group_count (model);
-    int labels[label_count];
-    for (int i = 0; i < label_count; i++)
-        labels[i] = act_label == i ? act_index : -1;
-    for (int i = 0; i < groups; i++)
-        visibles[i] = GBtransitionInGroup (model, labels, i);
+
+    int* groups_of_edge = NULL;
+    const int n = GBgroupsOfEdge(model, act_label, act_index, groups_of_edge);
+    if (n > 0) {
+        for (int i = 0; i < n; i++) {
+            visibles[groups_of_edge[i]] = 1;
+        }
+        RTfree(groups_of_edge);
+    } else {
+        chunk c = GBchunkGet(model, lts_type_get_edge_label_typeno(GBgetLTStype(model), act_label), act_index);
+        char s[c.len];
+        chunk2string(c, c.len, s);
+        Abort("There is no group that can produce edge \"%s\"", s);
+
+    }
 }
 
 void

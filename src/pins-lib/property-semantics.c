@@ -70,9 +70,9 @@ ltsmin_expr_lookup_values(ltsmin_expr_t ltl,ltsmin_parse_env_t env,model_t model
         right = ltsmin_expr_lookup_values(ltl->arg2, env, model);
         switch(ltl->token) {
         case PRED_EQ:
-            if (left >= 0) { // type(SVAR)
+            if (left >= 0) { // type(SVAR) || type(EVAR)
                 ltsmin_expr_lookup_value (ltl, ltl->arg2, left, env, model);
-            } else if (right >= 0) { // type(SVAR)
+            } else if (right >= 0) { // type(SVAR) || type(EVAR)
                 ltsmin_expr_lookup_value (ltl, ltl->arg1, right, env, model);
             }
         }
@@ -89,6 +89,8 @@ ltsmin_expr_lookup_values(ltsmin_expr_t ltl,ltsmin_parse_env_t env,model_t model
                 return lts_type_get_state_typeno (ltstype, ltl->idx);
             else
                 return lts_type_get_state_label_typeno (ltstype, ltl->idx - N);
+        } case EVAR: {
+            return lts_type_get_edge_label_typeno (GBgetLTStype (model), ltl->idx);
         }
         default:
             return -1;
@@ -164,6 +166,23 @@ mark_predicate (model_t m, ltsmin_expr_t e, int *dep, ltsmin_parse_env_t env)
             }
             break;
         }
+        case PRED_EVAR: {
+            int* groups = NULL;
+            int n = GBgroupsOfEdge(m, e->idx, e->num, groups);
+            if (n > 0) {
+                const matrix_t* r = GBgetDMInfoRead(m);
+                for (int i = 0; i < n; i++) {
+                    for (int j = 0; j < dm_ncols(r); j++) {
+                        if (dm_is_set(r, groups[i], j)) {
+                            if (dep[j] == 0) deps++;
+                            dep[j] = 1;
+                        }
+                    }
+                }
+                RTfree(groups);
+            }
+            break;
+        }
         default:
             LTSminLogExpr (error, "Unhandled predicate expression: ", e, env);
             HREabort (LTSMIN_EXIT_FAILURE);
@@ -178,6 +197,9 @@ mark_visible(model_t model, ltsmin_expr_t e, ltsmin_parse_env_t env)
 {
     int *visibility = GBgetPorGroupVisibility (model);
     HREassert (visibility != NULL, "POR layer present, but no visibility info found.");
+
+    printf("vis %d %d %d %d\n", e->idx, e->num, e->token, PRED_VAR);
+
     if (!e) return;
     switch(e->node_type) {
     case BINARY_OP:
@@ -208,6 +230,10 @@ mark_visible(model_t model, ltsmin_expr_t e, ltsmin_parse_env_t env)
                 pins_add_state_label_visible (model, e->idx - N);
             }
           } break;
+        case PRED_EVAR: {
+            pins_add_edge_label_visible(model, e->idx, e->num);
+            break;
+        }
         default:
             LTSminLogExpr (error, "Unhandled predicate expression: ", e, env);
             HREabort (LTSMIN_EXIT_FAILURE);

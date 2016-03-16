@@ -217,21 +217,34 @@ group_state_labels_all(model_t self, int *state, int *labels)
     return GBgetStateLabelsAll(parent, oldstate, labels);
 }
 
+/* map groups and delete duplicates, because groups may be subsumed */
 static int
-group_transition_in_group (model_t self, int* labels, int group)
+group_groups_of_edge (model_t self, int edgeno, int index, int* groups)
 {
-    group_context_t  ctx    = (group_context_t)GBgetContext (self);
-    model_t          parent = GBgetParent (self);
-    int              begin  = ctx->transbegin[group];
-    int              end    = ctx->transbegin[group + 1];
+    group_context_t ctx = (group_context_t) GBgetContext(self);
 
-    for (int i = begin; i < end; i++) {
-        int g = ctx->transmap[i];
-        if (GBtransitionInGroup(parent, labels, g))
-            return 1;
+    const int n = GBgroupsOfEdge(GBgetParent(self), edgeno, index, groups);
+
+    if (n == 0) return 0;
+
+    int* groups2 = RTmalloc(sizeof(int) * n);
+
+    bitvector_t edge_in_group;
+    if (bitvector_create(&edge_in_group, dm_nrows(GBgetDMInfo(self))) != 0) Abort("out of memory");
+
+    int n2 = 0;
+    for (int i = 0; i < n; i++) {
+        if (bitvector_is_set(&edge_in_group, ctx->groupmap[groups[i]])) continue;
+        groups2[n2++] = ctx->groupmap[groups[i]];
+        bitvector_set(&edge_in_group, ctx->groupmap[groups[i]]);
     }
+    bitvector_free(&edge_in_group);
 
-    return 0;
+    RTrealloc(groups2, sizeof(int) * n2);
+    RTfree(groups);
+    groups = groups2;
+
+    return n2;
 }
 
 static int
@@ -1296,7 +1309,7 @@ GBregroup (model_t model)
         GBsetStateLabelShort (group, group_state_labels_short);
         GBsetStateLabelLong (group, group_state_labels_long);
         GBsetStateLabelsAll (group, group_state_labels_all);
-        GBsetTransitionInGroup (group, group_transition_in_group);
+        GBsetGroupsOfEdge (group, group_groups_of_edge);
         GBsetPrettyPrint (group, group_chunk_pretty_print);
 
         GBinitModelDefaults (&group, model);
