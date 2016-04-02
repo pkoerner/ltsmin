@@ -21,7 +21,7 @@ libltsmin_la_SOURCES += ltsmin-lexer.c ltsmin-lexer.h
 libltsmin_la_SOURCES += ltsmin-lexer.l
 libltsmin_la_SOURCES += ltsmin-standard.h
 
-libltsmin_la_LIBADD   = $(top_builddir)/ltl2ba/libltl2ba.la
+libltsmin_la_LIBADD   = $(top_builddir)/ltl2ba/libltl2ba.la ../dm/libdm.la
 libltsmin_la_CPPFLAGS = -DNXT
 libltsmin_la_CPPFLAGS+= -I${top_srcdir}/ltl2ba $(AM_CPPFLAGS)
 
