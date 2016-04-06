@@ -402,12 +402,12 @@ init_ltsmin_buchi(model_t model, const char *ltl_file)
         ltsmin_expr_t notltl = LTSminExpr(UNARY_OP, LTL_NOT, 0, ltl, NULL);
         ltsmin_ltl2ba(notltl);
         ltsmin_buchi_t *ba = ltsmin_buchi();
-        ba->env = env;
         if (NULL == ba) {
             Print(info, "Empty buchi automaton.");
             Print(info, "The property is TRUE.");
             HREexit(LTSMIN_EXIT_SUCCESS);
         }
+        ba->env = env;
         if (ba->predicate_count > 30) {
             Abort("more than 30 predicates in buchi automaton are currently not supported");
         }
