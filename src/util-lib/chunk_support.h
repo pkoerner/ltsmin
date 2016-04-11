@@ -72,6 +72,13 @@ extern void chunk2string(chunk src,size_t  dst_size,char*dst);
 */
 extern void string2chunk(char*src,chunk *dst);
 
+/**
+\brief Compare two chunks
+
+Returns 1 when the chunks are equal, 0 otherwise.
+*/
+extern int chunks_equal(chunk c1, chunk c2);
+
 //@}
 
 #endif

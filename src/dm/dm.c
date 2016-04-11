@@ -1608,37 +1608,37 @@ dm_cols_to_idx_table(const matrix_t* m)
 void
 dm_apply_or(matrix_t* a, const matrix_t* b)
 {
-    HREassert(dm_nrows(a) == dm_rows(b) && dm_ncols(a) == dm_ncols(b))
+    HREassert(dm_nrows(a) == dm_nrows(b) && dm_ncols(a) == dm_ncols(b))
 
-    bitvector_union(a->bits, b->bits);
+    bitvector_union(&a->bits, &b->bits);
 }
 
 int
 dm_equals(const matrix_t* a, const matrix_t* b)
 {
-    HREassert(dm_nrows(a) == dm_rows(b) && dm_ncols(a) == dm_ncols(b))
+    HREassert(dm_nrows(a) == dm_nrows(b) && dm_ncols(a) == dm_ncols(b))
 
-    return bitvector_equal(a->bits, b->bits);
+    return bitvector_equal(&a->bits, &b->bits);
 }
 
 void
 dm_apply_xor(matrix_t* a, const matrix_t* b)
 {
-    HREassert(dm_nrows(a) == dm_rows(b) && dm_ncols(a) == dm_ncols(b))
+    HREassert(dm_nrows(a) == dm_nrows(b) && dm_ncols(a) == dm_ncols(b))
 
-    return bitvector_xor(a->bits, b->bits);
+    return bitvector_xor(&a->bits, &b->bits);
 }
 
 int
 dm_is_empty(const matrix_t* m)
 {
-    return bitvector_is_empty(m->bits);
+    return bitvector_is_empty(&m->bits);
 }
 
 void
-dm_prod_bm(bitvector_t* tgt, const bitvector_t* bv, const matrix_t* m)
+dm_prod(bitvector_t* tgt, const bitvector_t* bv, const matrix_t* m)
 {
-    HREassert(bitvector_size(tgt) == dm_ncols(m) && bitvector_size(bv) == dm_nrows(m));
+    HREassert(bitvector_size(tgt) == (size_t) dm_ncols(m) && bitvector_size(bv) == (size_t) dm_nrows(m));
 
     for (size_t i = 0; i < bitvector_size(bv); i++) {
         dm_bitvector_row(tgt, m, i);

@@ -1,11 +1,16 @@
 #include <hre/config.h>
 
 
+#include <limits.h>
 #include <stdlib.h>
 
 #include <dm/dm.h>
 #include <hre/user.h>
+#include <hre/stringindex.h>
+#include <ltsmin-lib/ltsmin-parse-env.h>
 #include <ltsmin-lib/ltsmin-standard.h>
+#include <ltsmin-lib/ltsmin-syntax.h>
+#include <ltsmin-lib/ltsmin-tl.h>
 #include <pins-lib/pins-util.h>
 
 
@@ -35,6 +40,15 @@ pins_get_group_count (model_t model)
 {
     matrix_t           *write_info = GBgetDMInfo (model);
     return dm_nrows (write_info);
+}
+
+void
+pins_add_group_visible (model_t model, int group)
+{
+    int *visibles = GBgetPorGroupVisibility (model);
+    HREassert (visibles != NULL, "pins_add_edge_label_visible: No (lower) PINS layer uses POR visibility.");
+    
+    visibles[group] = 1;
 }
 
 void

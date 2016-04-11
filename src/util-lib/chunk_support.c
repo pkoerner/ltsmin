@@ -166,5 +166,12 @@ void string2chunk(char*src,chunk *dst){
 	Warning(debug,"return length is %d",dst->len);
 }
 
+int chunks_equal(chunk c1, chunk c2) {
+    if (c1.len != c2.len) return 0;
 
+    for (chunk_len i = 0; i < c1.len; i++) {
+        if (c1.data[i] != c2.data[i]) return 0;
+    }
 
+    return 1;
+}
