@@ -3549,8 +3549,9 @@ init_model(char *file)
 #if !SPEC_MT_SAFE
 #if defined(PROB)
     if (lace_n_workers != 1) Abort("Use ProB with --lace-workers=1");
-#endif
+#else
     PINS_REQUIRE_FORK_WRAPPER = 1;
+#endif
 #endif
     GBloadFile(model, file, &model);
 
