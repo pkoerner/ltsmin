@@ -246,47 +246,20 @@ get_state_label_long(model_t model, int label, int *src) {
     return res;
 }
 
-static void
-prob_load_model(model_t model)
-{
-    Warning(info, "ProB init");
 
-    prob_context_t* ctx = (prob_context_t*) GBgetContext(model);
-
-    ctx->prob_client = prob_client_create();
-
-    const char* ipc = "ipc://";
-    char zocket[strlen(ipc) + strlen(ctx->zocket) + 1];
-    sprintf(zocket, "%s%s", ipc, ctx->zocket);
-    RTfree(ctx->zocket);
-
-    Warning(info, "connecting to zocket %s", zocket);
-    prob_connect(ctx->prob_client, zocket);
-
-    ProBInitialResponse init = prob_init(ctx->prob_client);
-
-    lts_type_t ltstype = lts_type_create();
-
-    // add an "Operation" type for edge labels
-    int is_new = 0;
-    ctx->op_type_no = lts_type_add_type(ltstype, "Operation", &is_new);
-    if (!is_new) Abort("Can not add type");
-    lts_type_set_format(ltstype, ctx->op_type_no, LTStypeChunk);
-
-    lts_type_set_edge_label_count(ltstype, 1);
-    lts_type_set_edge_label_name(ltstype, 0, "action");
-    lts_type_set_edge_label_typeno(ltstype, 0, ctx->op_type_no);
-
+static void setup_state_labels(model_t model,
+                               ProBInitialResponse init,
+                               string_index_t si_guards,
+                               lts_type_t ltstype,
+                               int bool_type,
+                               int guard_type) {
     // init state labels
     const int sl_inv_size = init.state_labels.nr_rows;
     const int sl_guards_size = init.guard_labels.nr_rows;
     const int sl_size = sl_inv_size + sl_guards_size;
     lts_type_set_state_label_count(ltstype, sl_size);
-    int bool_is_new, bool_type   = lts_type_add_type (ltstype, LTSMIN_TYPE_BOOL, &bool_is_new);
-    int guard_is_new, guard_type = lts_type_add_type (ltstype, LTSMIN_TYPE_GUARD, &guard_is_new);
 
 
-    string_index_t si_guards = SIcreate();
     for (int i = 0; i < sl_guards_size; i++) {
         lts_type_set_state_label_name(ltstype, i, init.guard_labels.rows[i].transition_group.data + 2); // skip the 'DA'
         // guards will be known as 'guard_X'
@@ -300,7 +273,6 @@ prob_load_model(model_t model)
         // invariants will be known as 'invX'
         lts_type_set_state_label_typeno(ltstype, i + sl_guards_size, bool_type);
     }
-
 
     sl_group_t *sl_group_all = RTmallocZero(sizeof(sl_group_t) + sl_size * sizeof(int));
     sl_group_all->count = sl_size;
@@ -317,8 +289,14 @@ prob_load_model(model_t model)
         GBsetStateLabelGroupInfo(model, GB_SL_GUARDS, sl_group_guard);
     }
 
+}
 
 
+static void setup_variables(prob_context_t *ctx,
+                            ProBInitialResponse init,
+                            string_index_t var_si,
+                            lts_type_t ltstype,
+                            int bool_type) {
     ctx->num_vars = init.variables.size;
 
     lts_type_set_state_length(ltstype, ctx->num_vars + 1);
@@ -331,7 +309,6 @@ prob_load_model(model_t model)
 
     ctx->var_type = RTmalloc(sizeof(int[ctx->num_vars]));
 
-    string_index_t var_si = SIcreate();
     for (size_t i = 0; i < ctx->num_vars; i++) {
         const char* type = init.variable_types.chunks[i].data;
 
@@ -352,40 +329,31 @@ prob_load_model(model_t model)
         lts_type_set_state_name(ltstype, i, name);
         lts_type_set_state_typeno(ltstype, i, type_no);
     }
+}
 
-    // done with ltstype
-    lts_type_validate(ltstype);
-
-    // make sure to set the lts-type before anything else in the GB
-    GBsetLTStype(model, ltstype);
-
-    if (bool_is_new) {
-        pins_chunk_put_at (model, bool_type, chunk_str(LTSMIN_VALUE_BOOL_FALSE), 0);
-        pins_chunk_put_at (model, bool_type, chunk_str(LTSMIN_VALUE_BOOL_TRUE ), 1);
-    }
-
-    if (guard_is_new) {
-        pins_chunk_put_at (model, guard_type, chunk_str(LTSMIN_VALUE_GUARD_FALSE), 0);
-        pins_chunk_put_at (model, guard_type, chunk_str(LTSMIN_VALUE_GUARD_TRUE ), 1);
-        pins_chunk_put_at (model, guard_type, chunk_str(LTSMIN_VALUE_GUARD_MAYBE), 2);
-    }
-
-
-
+static int setup_transition_groups(model_t model,
+                                   prob_context_t *ctx,
+                                   ProBInitialResponse init,
+                                   string_index_t op_si) {
     const int num_groups = init.transition_groups.size;
 
     ctx->op_type = RTmalloc(sizeof(int[num_groups]));
 
-    string_index_t op_si = SIcreate();
     for (int i = 0; i < num_groups; i++) {
         const char* name = init.transition_groups.chunks[i].data;
         const int at = pins_chunk_put (model, ctx->op_type_no, chunk_str(name));
         ctx->op_type[i] = at;
         SIputAt(op_si,name,i);
     }
+    return num_groups;
+}
 
 
-
+static void setup_guard_info(model_t model,
+                             int num_groups,
+                             ProBInitialResponse init,
+                             string_index_t op_si,
+                             string_index_t si_guards) {
     guard_t **guard_info = RTmalloc(num_groups * sizeof(guard_t*));
     for (int i = 0; i < num_groups; i++) {
         int idx_transition_group = SIlookup(op_si, init.guard_info.rows[i].transition_group.data);
@@ -399,24 +367,18 @@ prob_load_model(model_t model)
     }
     SIdestroy(&si_guards);
     GBsetGuardsInfo(model, guard_info);
+}
 
-
-
-
-    matrix_t* must_write = RTmalloc(sizeof(matrix_t));
-    matrix_t* read = RTmalloc(sizeof(matrix_t));
-    matrix_t* dm = RTmalloc(sizeof(matrix_t));
-    dm_create(must_write, num_groups, ctx->num_vars + 1);
-    dm_create(read, num_groups, ctx->num_vars + 1);
-
-    GBsetDMInfoMustWrite(model, must_write);
-    GBsetDMInfoRead(model, read);
-
-    GBsetDMInfo(model, dm);
+static void setup_state_label_info(model_t model,
+                                   prob_context_t *ctx, 
+                                   ProBInitialResponse init,
+                                   string_index_t var_si) {
+    const int sl_inv_size = init.state_labels.nr_rows;
+    const int sl_guards_size = init.guard_labels.nr_rows;
+    const int sl_size = sl_inv_size + sl_guards_size;
 
     matrix_t* sl_info = RTmalloc(sizeof(matrix_t));
     dm_create(sl_info, sl_size, ctx->num_vars + 1);
-    GBsetStateLabelInfo(model, sl_info);
     for (int i = 0; i < sl_guards_size; i++) {
         for (size_t j = 0; j < init.guard_labels.rows[i].variables.size; j++) {
             const char* var = init.guard_labels.rows[i].variables.chunks[j].data;
@@ -432,6 +394,27 @@ prob_load_model(model_t model)
             dm_set(sl_info, i+sl_guards_size, col);
         }
     }
+    GBsetStateLabelInfo(model, sl_info);
+}
+
+static void setup_read_write_matrices(model_t model,
+                                      prob_context_t *ctx,
+                                      int num_groups,
+                                      ProBInitialResponse init,
+                                      string_index_t var_si,
+                                      string_index_t op_si) {
+    matrix_t* must_write = RTmalloc(sizeof(matrix_t));
+    matrix_t* read = RTmalloc(sizeof(matrix_t));
+    matrix_t* dm = RTmalloc(sizeof(matrix_t));
+    dm_create(must_write, num_groups, ctx->num_vars + 1);
+    dm_create(read, num_groups, ctx->num_vars + 1);
+
+    GBsetDMInfoMustWrite(model, must_write);
+    GBsetDMInfoRead(model, read);
+
+    GBsetDMInfo(model, dm);
+
+
 
     // set all variables for init group to write dependent
     for (size_t i = 0; i < ctx->num_vars + 1; i++) dm_set(must_write, 0, i);
@@ -485,6 +468,78 @@ prob_load_model(model_t model)
 
     dm_copy(must_write, dm);
     dm_apply_or(dm, read);
+
+}
+
+static void
+prob_load_model(model_t model)
+{
+    Warning(info, "ProB init");
+
+    prob_context_t* ctx = (prob_context_t*) GBgetContext(model);
+
+    ctx->prob_client = prob_client_create();
+
+    const char* ipc = "ipc://";
+    char zocket[strlen(ipc) + strlen(ctx->zocket) + 1];
+    sprintf(zocket, "%s%s", ipc, ctx->zocket);
+    RTfree(ctx->zocket);
+
+    Warning(info, "connecting to zocket %s", zocket);
+    prob_connect(ctx->prob_client, zocket);
+
+    ProBInitialResponse init = prob_init(ctx->prob_client);
+
+    lts_type_t ltstype = lts_type_create();
+    int bool_is_new, bool_type   = lts_type_add_type (ltstype, LTSMIN_TYPE_BOOL, &bool_is_new);
+    int guard_is_new, guard_type = lts_type_add_type (ltstype, LTSMIN_TYPE_GUARD, &guard_is_new);
+
+    // add an "Operation" type for edge labels
+    int is_new = 0;
+    ctx->op_type_no = lts_type_add_type(ltstype, "Operation", &is_new);
+    if (!is_new) Abort("Can not add type");
+    lts_type_set_format(ltstype, ctx->op_type_no, LTStypeChunk);
+
+    lts_type_set_edge_label_count(ltstype, 1);
+    lts_type_set_edge_label_name(ltstype, 0, "action");
+    lts_type_set_edge_label_typeno(ltstype, 0, ctx->op_type_no);
+
+    string_index_t si_guards = SIcreate();
+    setup_state_labels(model, init, si_guards, ltstype, bool_type, guard_type);
+
+
+    string_index_t var_si = SIcreate();
+    setup_variables(ctx, init, var_si, ltstype, bool_type);
+
+
+    // done with ltstype
+    lts_type_validate(ltstype);
+
+    // make sure to set the lts-type before anything else in the GB
+    GBsetLTStype(model, ltstype);
+
+    if (bool_is_new) {
+        pins_chunk_put_at (model, bool_type, chunk_str(LTSMIN_VALUE_BOOL_FALSE), 0);
+        pins_chunk_put_at (model, bool_type, chunk_str(LTSMIN_VALUE_BOOL_TRUE ), 1);
+    }
+
+    if (guard_is_new) {
+        pins_chunk_put_at (model, guard_type, chunk_str(LTSMIN_VALUE_GUARD_FALSE), 0);
+        pins_chunk_put_at (model, guard_type, chunk_str(LTSMIN_VALUE_GUARD_TRUE ), 1);
+        pins_chunk_put_at (model, guard_type, chunk_str(LTSMIN_VALUE_GUARD_MAYBE), 2);
+    }
+
+
+    string_index_t op_si = SIcreate();
+
+    const int num_groups = setup_transition_groups(model, ctx, init, op_si);
+
+    setup_guard_info(model, num_groups, init, op_si, si_guards);
+
+    setup_state_label_info(model, ctx, init, var_si);
+
+
+    setup_read_write_matrices(model, ctx, num_groups, init, var_si, op_si);
 
     int init_state[ctx->num_vars + 1];
     prob2pins_state(init.initial_state, init_state, model);
