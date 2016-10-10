@@ -12,6 +12,7 @@
 #include <hre/stringindex.h>
 #include <hre/unix.h>
 #include <ltsmin-lib/ltsmin-standard.h>
+#include <pins-lib/por/pins2pins-por.h>
 #include <pins-lib/pins.h>
 #include <pins-lib/pins-util.h>
 #include <prob-lib/prob_helpers.h>
@@ -745,7 +746,7 @@ prob_load_model(model_t model)
     Warning(info, "connecting to zocket %s", zocket);
     prob_connect(ctx->prob_client, zocket);
 
-    ProBInitialResponse init = prob_init(ctx->prob_client);
+    ProBInitialResponse init = prob_init(ctx->prob_client, PINS_POR);
 
     lts_type_t ltstype = lts_type_create();
     int bool_is_new, bool_type   = lts_type_add_type (ltstype, LTSMIN_TYPE_BOOL, &bool_is_new);
