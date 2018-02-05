@@ -34,12 +34,28 @@ static char* zocket_prefix = "/tmp/ltsmin-";
 
 static char* prob_opts = "";
 
+///* for short states, we need to access the correct vartype;
+// * counting the position of the next 1 in the matrix
+// * over and over again feels too stupid;
+// * do this once at the beginning and store it.
+// * This should map a transition group to an ordered set of var_type indices. */
+//typedef struct short_row {
+//    size_t size;
+//    int *indices;
+//} short_row_t;
+//
+//typedef struct short_matrix {
+//    short_row_t *matrix;
+//    size_t size; // the amount of transition groups
+//} short_matrix_t;
+
 typedef struct prob_context {
     size_t num_vars;
     int op_type_no;
     prob_client_t prob_client;
     int* op_type;
     int* var_type;
+    int **transition_to_index;
     char* zocket;
 } prob_context_t;
 
@@ -170,6 +186,38 @@ pins2prob_state(model_t model, int* pins)
     return prob;
 }
 
+static ProBState
+pins2prob_state_short(model_t model, int* pins, size_t state_size, int group)
+{
+    prob_context_t* ctx = (prob_context_t*) GBgetContext(model);
+
+    ProBState prob;
+
+    prob.size = state_size - 1; // is_init should not be included
+    prob.chunks = RTmalloc(sizeof(ProBChunk) * prob.size);
+
+    printf("pins2prob state: %zu / %zu \n ", prob.size, ctx->num_vars);
+    Debugf("pins2prob state (%zu): ", prob.size);
+    assert(ctx->transition_to_index[group][0] == (int) state_size);
+    for (size_t i = 0; i < prob.size; i++) {
+        int idx = ctx->transition_to_index[group][i + 1];
+        chunk c = pins_chunk_get (model, ctx->var_type[idx], pins[i]);
+
+        prob.chunks[i].data = c.data;
+        assert(c.data[0] == 'D');
+        prob.chunks[i].size = c.len;
+        Debugf("(%u)", c.len);
+#ifdef LTSMIN_DEBUG
+        for (unsigned int j = 0; j < c.len; j++) Debugf("%x", c.data[j]);
+#endif
+
+        Debugf(",");
+    }
+    Debugf("\n");
+
+    return prob;
+}
+
 static void
 prob2pins_state(ProBState s, int *state, model_t model)
 {
@@ -187,6 +235,32 @@ prob2pins_state(ProBState s, int *state, model_t model)
 #endif
         Debugf(",");
         int chunk_id = pins_chunk_put (model, ctx->var_type[i], c);
+        state[i] = chunk_id;
+    }
+    Debugf("\n");
+}
+
+static void
+prob2pins_state_short(ProBState s, int *state, model_t model, size_t state_size, int group)
+{
+    prob_context_t* ctx = (prob_context_t*) GBgetContext(model);
+    // -1 because is_init, once again
+    HREassert(s.size == state_size-1, "expecting %zu chunks, but got %zu", state_size-1, s.size);
+
+    Debugf("prob2pins state (%zu): ", s.size);
+    assert(ctx->transition_to_index[group][0] == (int) state_size);
+    for (size_t i = 0; i < s.size; i++) {
+        chunk c;
+        c.data = s.chunks[i].data;
+        assert(c.data[0] == 'D');
+        c.len = s.chunks[i].size;
+        Debugf("(%u)", c.len);
+#ifdef LTSMIN_DEBUG
+        for (unsigned int j = 0; j < c.len; j++) Debugf("%x", c.data[j]);
+#endif
+        Debugf(",");
+        int idx = ctx->transition_to_index[group][i + 1];
+        int chunk_id = pins_chunk_put (model, ctx->var_type[idx], c);
         state[i] = chunk_id;
     }
     Debugf("\n");
@@ -254,6 +328,48 @@ get_successors_long(model_t model, int group, int *src, TransitionCB cb, void *c
         transition_info_t transition_info = { transition_labels, group, 0 };
 
         prob2pins_state(successors[i], s, model);
+        prob_destroy_state(successors + i);
+        cb(ctx, &transition_info, s, NULL);
+    }
+
+    RTfree(successors);
+
+    return nr_successors;
+}
+
+static int
+get_successors_short(model_t model, int group, int *src, TransitionCB cb, void *ctx)
+{
+    printf("I'm called, yo\n");
+    prob_context_t* prob_ctx = (prob_context_t*) GBgetContext(model);
+
+    size_t state_size = dm_ones_in_row(GBgetDMInfo(model),group);  // last is is_init
+
+    /* Don't give any successors for the init group if we have already initialized.
+     * This prevents adding a self loop to the initial state. */
+    if (group == 0 && src[state_size - 1] == 1) return 0;
+
+    // Don't give any successors for groups other than the init group if we have not initialized
+    if (group > 0 && src[state_size - 1] == 0) return 0;
+
+    int operation_type = prob_ctx->op_type_no;
+
+    chunk op_name = pins_chunk_get (model, operation_type, prob_ctx->op_type[group]);
+
+    ProBState prob = pins2prob_state_short(model, src, state_size, group);
+
+    int nr_successors;
+    ProBState *successors = prob_next_state(prob_ctx->prob_client, prob, op_name.data, &nr_successors);
+    prob_destroy_state(&prob);
+
+    int s[state_size];
+    s[state_size - 1] = 1; // is_init
+    for (int i = 0; i < nr_successors; i++) {
+
+        int transition_labels[1] = { prob_ctx->op_type[group] };
+        transition_info_t transition_info = { transition_labels, group, 0 };
+
+        prob2pins_state_short(successors[i], s, model, state_size, group);
         prob_destroy_state(successors + i);
         cb(ctx, &transition_info, s, NULL);
     }
@@ -733,6 +849,34 @@ static void setup_necessary_disabling_set(model_t model, ProBInitialResponse ini
     GBsetGuardNDSInfo(model, gnds_info);
 }
 
+//static void
+//setup_transition_short_matrix(model_t *model, int num_groups)
+//{
+//    prob_context_t* ctx = (prob_context_t*) GBgetContext(model);
+//    short_matrix_t matrix;
+//    matrix.size = num_groups;
+//    matrix.matrix = RTmalloc(sizeof(short_row_t) * num_groups);
+//
+//    int i;
+//    for (i = 0; i < num_groups; i++) {
+//        int len = dm_ones_in_row(GBgetDMInfo(model),i);
+//        matrix.matrix[i] = RTmalloc(sizeof(int) * len);
+//        matrix.matrix.size = len;
+//        int pos = 0;
+//
+//        for (j = 0; j < ctx->num_vars; j++) { // ignore is_init
+//            
+//            matrix.matrix.indices[j]
+//        }
+//        // get amount of ones in matrix
+//        // note which 
+//    }
+//
+//
+//
+//    ctx->transition_short_matrix = matrix;
+//}
+
 static void
 prob_load_model(model_t model)
 {
@@ -813,6 +957,9 @@ prob_load_model(model_t model)
         setup_necessary_disabling_set(model, init, si_guards, op_si, num_groups);
     }
 
+    //setup_transition_short_matrix(ctx, num_groups);
+    ctx->transition_to_index = dm_rows_to_idx_table(GBgetDMInfo(model));
+
     int init_state[ctx->num_vars + 1];
     prob2pins_state(init.initial_state, init_state, model);
     init_state[ctx->num_vars] = 0;
@@ -821,7 +968,8 @@ prob_load_model(model_t model)
 
     prob_destroy_initial_response(&init);
 
-    GBsetNextStateLong(model, get_successors_long);
+    //GBsetNextStateLong(model, get_successors_long);
+    GBsetNextStateShort(model, get_successors_short);
     GBsetStateLabelLong(model, get_state_label_long);
     GBsetActionsLong(model, next_action_long);
 

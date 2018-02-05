@@ -15,8 +15,7 @@
 #include <hre/user.h>
 
 struct prob_client {
-    zctx_t* ctx;
-    void* zocket;
+    zsock_t* zocket;
     uint32_t id_count;
     char* file;
 };
@@ -43,21 +42,16 @@ prob_client_destroy(prob_client_t pc)
 void
 prob_connect(prob_client_t pc, const char* file)
 {
-    pc->ctx = zctx_new();
-    if (pc->ctx == NULL) Abort("Could not create zctx");
-    pc->zocket = zsocket_new(pc->ctx, ZMQ_REQ);
-    if (pc->zocket == NULL) Abort("Could not create zsocket");
     pc->file = strdup(file);
-
-    if (zsocket_connect(pc->zocket, "%s", pc->file) != 0) Abort("Could not connect to zocket %s", pc->file);
+    pc->zocket = zsock_new_req(pc->file);
+    if (pc->zocket == NULL) Abort("Could not connect to zocket %s", pc->file);
 }
 
 void
 prob_disconnect(prob_client_t pc)
 {
-    if (zsocket_disconnect(pc->zocket, "%s", pc->file) != 0) Warning(info, "Could not disconnect from zocket %s", pc->file);
-    zsocket_destroy(pc->ctx, pc->zocket);
-    zctx_destroy(&(pc->ctx));
+    if (zsock_disconnect(pc->zocket, "%s", pc->file) != 0) Warning(info, "Could not disconnect from zocket %s", pc->file);
+    zsock_destroy(&pc->zocket);
 }
 
 const char*
