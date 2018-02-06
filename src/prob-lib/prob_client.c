@@ -193,6 +193,12 @@ prob_next_state(prob_client_t pc, ProBState s, char *transitiongroup, int *size)
 }
 
 ProBState *
+prob_next_state_short(prob_client_t pc, ProBState s, char *transitiongroup, int *size)
+{
+    return prob_next_x(pc, s, transitiongroup, size, "Xs"); // next short
+}
+
+ProBState *
 prob_next_action(prob_client_t pc, ProBState s, char *transitiongroup, int *size)
 {
     return prob_next_x(pc, s, transitiongroup, size, "next-update");

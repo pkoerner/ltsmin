@@ -196,7 +196,6 @@ pins2prob_state_short(model_t model, int* pins, size_t state_size, int group)
     prob.size = state_size - 1; // is_init should not be included
     prob.chunks = RTmalloc(sizeof(ProBChunk) * prob.size);
 
-    printf("pins2prob state: %zu / %zu \n ", prob.size, ctx->num_vars);
     Debugf("pins2prob state (%zu): ", prob.size);
     assert(ctx->transition_to_index[group][0] == (int) state_size);
     for (size_t i = 0; i < prob.size; i++) {
@@ -340,7 +339,6 @@ get_successors_long(model_t model, int group, int *src, TransitionCB cb, void *c
 static int
 get_successors_short(model_t model, int group, int *src, TransitionCB cb, void *ctx)
 {
-    printf("I'm called, yo\n");
     prob_context_t* prob_ctx = (prob_context_t*) GBgetContext(model);
 
     size_t state_size = dm_ones_in_row(GBgetDMInfo(model),group);  // last is is_init
@@ -359,7 +357,7 @@ get_successors_short(model_t model, int group, int *src, TransitionCB cb, void *
     ProBState prob = pins2prob_state_short(model, src, state_size, group);
 
     int nr_successors;
-    ProBState *successors = prob_next_state(prob_ctx->prob_client, prob, op_name.data, &nr_successors);
+    ProBState *successors = prob_next_state_short(prob_ctx->prob_client, prob, op_name.data, &nr_successors);
     prob_destroy_state(&prob);
 
     int s[state_size];
