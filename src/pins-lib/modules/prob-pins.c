@@ -56,6 +56,7 @@ typedef struct prob_context {
     int* op_type;
     int* var_type;
     int **transition_to_index;
+    int **state_label_to_index;
     char* zocket;
 } prob_context_t;
 
@@ -187,19 +188,21 @@ pins2prob_state(model_t model, int* pins)
 }
 
 static ProBState
-pins2prob_state_short(model_t model, int* pins, size_t state_size, int group)
+pins2prob_state_short(model_t model, int* pins, size_t state_size, int group, int **matrix, int exclude_is_init)
 {
     prob_context_t* ctx = (prob_context_t*) GBgetContext(model);
 
     ProBState prob;
 
-    prob.size = state_size - 1; // is_init should not be included
+    prob.size = state_size - exclude_is_init;
+    // is_init should not be included for next_state (always a dependency)
+    // but also should not be included for state_label (never a dependency)
     prob.chunks = RTmalloc(sizeof(ProBChunk) * prob.size);
 
     Debugf("pins2prob state (%zu): ", prob.size);
-    assert(ctx->transition_to_index[group][0] == (int) state_size);
+    assert(matrix[group][0] == (int) state_size);
     for (size_t i = 0; i < prob.size; i++) {
-        int idx = ctx->transition_to_index[group][i + 1];
+        int idx = matrix[group][i + 1];
         chunk c = pins_chunk_get (model, ctx->var_type[idx], pins[i]);
 
         prob.chunks[i].data = c.data;
@@ -354,7 +357,7 @@ get_successors_short(model_t model, int group, int *src, TransitionCB cb, void *
 
     chunk op_name = pins_chunk_get (model, operation_type, prob_ctx->op_type[group]);
 
-    ProBState prob = pins2prob_state_short(model, src, state_size, group);
+    ProBState prob = pins2prob_state_short(model, src, state_size, group, prob_ctx->transition_to_index, 1);
 
     int nr_successors;
     ProBState *successors = prob_next_state_short(prob_ctx->prob_client, prob, op_name.data, &nr_successors);
@@ -392,6 +395,37 @@ prob_exit(model_t model)
 }
 
 
+static int
+get_state_label_short(model_t model, int label, int *src) {
+    prob_context_t* prob_ctx = (prob_context_t*) GBgetContext(model);
+    switch (label) {
+        case PROB_IS_INIT_EQUALS_FALSE_GUARD: {
+            int res = src[prob_ctx->num_vars];
+//            chunk c = pins_chunk_get(model, prob_ctx->var_type[prob_ctx->num_vars + 1], src[prob_ctx->num_vars + 1]);
+//            printf("%d\n", c.len);
+//            int res = *((int*) c.data);
+            assert(res == 0 || res == 1);
+            return res == 0;
+        }
+        case PROB_IS_INIT_EQUALS_TRUE_GUARD: {
+            int res = src[prob_ctx->num_vars];
+            //chunk c = pins_chunk_get(model, prob_ctx->var_type[prob_ctx->num_vars + 1], src[prob_ctx->num_vars + 1]);
+            //printf("%d\n", c.len);
+            //int res = *((int*) c.data);
+            assert(res == 0 || res == 1);
+            return res == 1;
+        }
+        default: {
+            size_t state_size = dm_ones_in_row(GBgetStateLabelInfo(model),label);  // last is is_init
+            lts_type_t ltstype = GBgetLTStype(model);
+            ProBState prob = pins2prob_state_short(model, src, state_size, label, prob_ctx->state_label_to_index, 0);
+            char *label_s = lts_type_get_state_label_name(ltstype, label);
+            int res = prob_get_state_label_short(prob_ctx->prob_client, prob, label_s);
+            //prob_destroy_state(&prob);
+            return res;
+        }
+    }
+}
 
 static int
 get_state_label_long(model_t model, int label, int *src) {
@@ -957,6 +991,7 @@ prob_load_model(model_t model)
 
     //setup_transition_short_matrix(ctx, num_groups);
     ctx->transition_to_index = dm_rows_to_idx_table(GBgetDMInfo(model));
+    ctx->state_label_to_index = dm_rows_to_idx_table(GBgetStateLabelInfo(model));
 
     int init_state[ctx->num_vars + 1];
     prob2pins_state(init.initial_state, init_state, model);
@@ -968,7 +1003,8 @@ prob_load_model(model_t model)
 
     //GBsetNextStateLong(model, get_successors_long);
     GBsetNextStateShort(model, get_successors_short);
-    GBsetStateLabelLong(model, get_state_label_long);
+    //GBsetStateLabelLong(model, get_state_label_long);
+    GBsetStateLabelShort(model, get_state_label_short);
     GBsetActionsLong(model, next_action_long);
 
     GBsetExit(model, prob_exit);

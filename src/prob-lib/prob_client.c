@@ -204,11 +204,10 @@ prob_next_action(prob_client_t pc, ProBState s, char *transitiongroup, int *size
     return prob_next_x(pc, s, transitiongroup, size, "next-update");
 }
 
-int
-prob_get_state_label(prob_client_t pc, ProBState s, char *label)
-{
+static int
+prob_get_label(prob_client_t pc, ProBState s, char *label, char *header) {
     zmsg_t *request = zmsg_new();
-    zmsg_addstr(request, "get-state-label");
+    zmsg_addstr(request, header);
     zmsg_addstrf(request, "%d", pc->id_count);
     zmsg_addstrf(request, "DA%s", label);
     prob_put_state(request, s);
@@ -225,6 +224,18 @@ prob_get_state_label(prob_client_t pc, ProBState s, char *label)
     RTfree(result_s);
     zmsg_destroy(&response);
     return res;
+}
+
+int
+prob_get_state_label(prob_client_t pc, ProBState s, char *label)
+{
+    return prob_get_label(pc, s, label, "get-state-label");
+}
+
+int
+prob_get_state_label_short(prob_client_t pc, ProBState s, char *label)
+{
+    return prob_get_label(pc, s, label, "LBLs");
 }
 
 void prob_get_label_group(prob_client_t pc, ProBState s, int group, int *res) {

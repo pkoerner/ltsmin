@@ -26,6 +26,7 @@ extern ProBInitialResponse prob_init(prob_client_t pc, int is_por);
 extern void print_matrix(const ProBMatrix m);
 
 extern int prob_get_state_label(prob_client_t pc, ProBState s, char *label);
+extern int prob_get_state_label_short(prob_client_t pc, ProBState s, char *label);
 
 void prob_get_label_group(prob_client_t pc, ProBState s, int group, int *res);
 #endif
