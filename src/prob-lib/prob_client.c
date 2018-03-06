@@ -193,9 +193,9 @@ prob_next_state(prob_client_t pc, ProBState s, char *transitiongroup, int *size)
 }
 
 ProBState *
-prob_next_state_short(prob_client_t pc, ProBState s, char *transitiongroup, int *size)
+prob_next_state_short_R2W(prob_client_t pc, ProBState s, char *transitiongroup, int *size)
 {
-    return prob_next_x(pc, s, transitiongroup, size, "Xs"); // next short
+    return prob_next_x(pc, s, transitiongroup, size, "X"); // next short R2W
 }
 
 ProBState *
