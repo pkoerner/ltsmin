@@ -34,6 +34,8 @@ static char* zocket_prefix = "/tmp/ltsmin-";
 
 static char* prob_opts = "";
 
+static pthread_spinlock_t new_zocket_lock;
+
 ///* for short states, we need to access the correct vartype;
 // * counting the position of the next 1 in the matrix
 // * over and over again feels too stupid;
@@ -447,7 +449,6 @@ prob_exit(model_t model)
     }
 }
 
-
 static int
 get_state_label_short(model_t model, int label, int *src) {
     prob_context_t* prob_ctx = (prob_context_t*) GBgetContext(model);
@@ -473,7 +474,6 @@ get_state_label_short(model_t model, int label, int *src) {
         }
     }
 }
-
 static int
 get_state_label_long(model_t model, int label, int *src) {
     prob_context_t* prob_ctx = (prob_context_t*) GBgetContext(model);
@@ -936,6 +936,25 @@ static void setup_necessary_disabling_set(model_t model, ProBInitialResponse ini
     GBsetGuardNDSInfo(model, gnds_info);
 }
 
+
+static void
+prob_connect_atomic(prob_client_t pc, const char* file)
+{
+    // create lock with main thread.
+    if (HREme(HREglobal()) == 0) pthread_spin_init(&new_zocket_lock, PTHREAD_PROCESS_SHARED);
+    HREbarrier(HREglobal());
+
+    // connect to ProB
+    pthread_spin_lock(&new_zocket_lock);
+    Warning(info, "connecting to zocket %s", file);
+    prob_connect(pc, file);
+    pthread_spin_unlock(&new_zocket_lock);
+
+    // main thread destroys lock.
+    HREbarrier(HREglobal());
+    if (HREme(HREglobal()) == 0) pthread_spin_destroy(&new_zocket_lock);
+}
+
 //static void
 //setup_transition_short_matrix(model_t *model, int num_groups)
 //{
@@ -972,14 +991,14 @@ prob_load_model(model_t model)
     prob_context_t* ctx = (prob_context_t*) GBgetContext(model);
 
     ctx->prob_client = prob_client_create();
+    if (HREme(HREglobal()) == 0) prob_set_logstream();
 
     const char* ipc = "ipc://";
     char zocket[strlen(ipc) + strlen(ctx->zocket) + 1];
     sprintf(zocket, "%s%s", ipc, ctx->zocket);
     RTfree(ctx->zocket);
 
-    Warning(info, "connecting to zocket %s", zocket);
-    prob_connect(ctx->prob_client, zocket);
+    prob_connect_atomic(ctx->prob_client, zocket);
 
     ProBInitialResponse init = prob_init(ctx->prob_client, PINS_POR);
 
